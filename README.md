@@ -15,7 +15,7 @@ cd <repository-directory>
 
 2. Make the run script executable:
 ```bash
-chmod +x run_signal_recorder.sh
+chmod +x run.sh
 ```
 
 3. Create a `config.yaml` file in the project root with your specific configuration. Example:
@@ -41,7 +41,7 @@ usrp:
 
 To start the signal recorder:
 ```bash
-./run_signal_recorder.sh
+./run.sh
 ```
 
 ## Features
