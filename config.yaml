@@ -7,12 +7,6 @@ sftp:
   username: cfg-admin
   password: Cfg@123@
   remote_path: /LLTS/Upload/
-# sftp:
-#   host: eu-central-1.sftpcloud.io
-#   port: 22
-#   username: c2d6d02383724900af93af2f6ea51831
-#   password: IcfT2ZdVvEYGhFpeZQQtD9UZ2Eu2wUdx
-#   remote_path: LLTS/Upload/
 usrp:
   sampling_rate: 2e6 # 2 MHz
   center_freq: 100e6 # 100 MHz
