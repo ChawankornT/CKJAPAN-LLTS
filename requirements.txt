@@ -1,0 +1,7 @@
+numpy==1.21.6
+PyYAML==6.0
+pysftp==0.2.9
+signal==1.0.0
+pathlib==1.0.1
+json==2.0.9
+threading==0.1.2
