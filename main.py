@@ -28,7 +28,12 @@ def signal_handler(signum, frame):
     # Stop the data processor thread
     data_processor.stop()
     data_processor.join()  # Wait for the thread to finish
-    del recorder
+
+    # Stop the data uploader thread
+    data_uploader.stop()
+    data_uploader.join()  # Wait for the thread to finish
+
+    # del recorder
     sys.exit(0)
 
 def main():
@@ -81,6 +86,9 @@ if __name__ == "__main__":
     sample_rate = usrp_config.sampling_rate
     center_freq = usrp_config.center_freq
     gain = usrp_config.gain
+
+    # Create output directory if it doesn't exist
+    Path(data_path).mkdir(exist_ok=True)
 
     # Register signal handler
     signal.signal(signal.SIGINT, signal_handler)

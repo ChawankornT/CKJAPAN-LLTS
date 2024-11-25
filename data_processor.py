@@ -3,6 +3,7 @@ import threading
 import time
 import numpy as np
 import shutil
+import os
 from pathlib import Path, PurePath
 from util.config_manager import ConfigManager
     
@@ -31,8 +32,8 @@ class DataProcessor(threading.Thread):
         Path(self.segment_path).mkdir(exist_ok=True)
 
         # Create a directory for the processed data.
-        self.processed_path = Path(self.data_path, "Processed_Data")
-        self.processed_path.mkdir(exist_ok=True)
+        # self.processed_path = Path(self.data_path, "Processed_Data")
+        # Path(self.processed_path).mkdir(exist_ok=True)
 
     def run(self):
         """Main thread execution"""
@@ -43,7 +44,7 @@ class DataProcessor(threading.Thread):
                 data_path = Path(self.data_path)
 
                 # Looking for segment file .npy only
-                fileList = sorted(data_path.glob("*.npy*"))
+                fileList = sorted(data_path.glob("*.npy"))
                 fileCount = len(fileList)
 
                 if fileCount <= 1:
@@ -72,13 +73,16 @@ class DataProcessor(threading.Thread):
 
                         # Process data segments
                         self._process_segments(complex_array, file_sec, file_microsec)
-
+                        
                         # Move processed file to folder processed_data
-                        shutil.move(file, str(PurePath(self.processed_path, file_name)))
+                        # shutil.move(file, str(PurePath(self.processed_path, file_name)))
 
+                        # Remove file
+                        os.remove(str(file))
+                    
                     except Exception as e:
                         print(f"Error processing file {file}: {str(e)}")
-
+                time.sleep(5)
             except Exception as e:
                 print(f"Error in data processor thread: {str(e)}")
                 time.sleep(1)  # Wait before retrying
@@ -139,11 +143,16 @@ class DataProcessor(threading.Thread):
         # Calculate timestamp in second
         peak_times_sec = [
             f"{file_sec}.{str(file_microsec + time).zfill(7)}"
+            if file_microsec + time < 10000000
+            else f"{file_sec + 1}.{str(file_microsec + time - 10000000).zfill(7)}"
             for time in peak_times
         ]
 
         # Write to json format
-        self._write_to_json(peak_values, peak_times_sec, file_sec, file_microsec)
+        # self._write_to_json(peak_values, peak_times_sec, file_sec, file_microsec)
+
+        # Write to file
+        self._write_to_file(peak_values, peak_times_sec)
 
     def _write_to_json(self, peak_values: list, peak_times: list, file_sec: int, file_microsec: int):
         """Save peak values and times of the peak to a JSON file."""
@@ -170,6 +179,33 @@ class DataProcessor(threading.Thread):
             return str(json_file_path)
         except Exception as e:
             print(f"Error saving JSON file {json_file_path}: {str(e)}")
+            return None
+        
+    def _write_to_file(self, peak_values: list, peak_times: list):
+        """Save peak values and times of the peak to a file."""
+        try:
+            # Group by integer part
+            grouped_data = {}
+            for time, value in list(zip(peak_times, peak_values)):
+                time_sec = int(float(time))
+                time_decimal = int(str(time).split('.')[1])
+                if time_sec not in grouped_data:
+                    grouped_data[time_sec] = []
+                grouped_data[time_sec].append(f"{time_decimal}={value}")
+
+            # Write the grouped data to existing files (append mode)
+            for group, entries in grouped_data.items():
+                file_name = f"{self.site_name}{group}"
+                file_path = PurePath(self.segment_path, file_name)
+
+                with open(file_path, 'a') as f:  # Open in append mode ('a')
+                    for entry in entries:
+                        f.write(entry + "\n")
+
+                print(f"Saved data to: {file_path}")
+            return str(file_path)
+        except Exception as e:
+            print(f"Error saving file {file_path}: {str(e)}")
             return None
         
     def stop(self):
