@@ -36,7 +36,8 @@ class USRPSim:
             buffer = np.zeros(self.samples_per_buffer, dtype=np.complex64)
             
             samples_received = 0
-            
+            previous_time = 0
+
             while self.running:
                 try:
                     # Receive samples
@@ -45,23 +46,24 @@ class USRPSim:
                     # timestamp = math.floor(time.time())
 
                     # Simulate USRP data
-                    buffer = np.float32(np.random.uniform(-1, 1, self.samples_per_buffer)) + 1j * np.float32(np.random.uniform(-1, 1, self.samples_per_buffer))
-                    # buffer = np.random.uniform(-1, 1, self.samples_per_buffer) + 1j * np.random.uniform(-1, 1, self.samples_per_buffer)
-
-                    # while samples_received < self.samples_per_buffer:
-                    #     result = self.rx_streamer.recv(
-                    #         buffer[samples_received:],
-                    #         metadata,
-                    #         timeout=0.1
-                    #     )
+                    if timestamp - previous_time >= 1.0:
+                        buffer = np.float32(np.random.uniform(-1, 1, self.samples_per_buffer)) + 1j * np.float32(np.random.uniform(-1, 1, self.samples_per_buffer))
+                        # buffer = np.random.uniform(-1, 1, self.samples_per_buffer) + 1j * np.random.uniform(-1, 1, self.samples_per_buffer)
                         
+                        # while samples_received < self.samples_per_buffer:
+                        #     result = self.rx_streamer.recv(
+                        #         buffer[samples_received:],
+                        #         metadata,
+                        #         timeout=0.1
+                        #     )
+                            
+                        #     samples_received += result
 
-                    #     samples_received += result
-
-                    # Put samples in queue
-                    # timestamp = datetime.now()
-                    self.data_queue.put((buffer.copy(), timestamp))
-                    time.sleep(1)
+                        # Put samples in queue
+                        # timestamp = datetime.now()
+                        self.data_queue.put((buffer.copy(), timestamp))
+                        # time.sleep(1)
+                        previous_time = timestamp
                     
                 except queue.Full:
                     print("Queue full, dropping samples")
@@ -109,3 +111,12 @@ class USRPSim:
         # Wait for thread to finish
         if self.recording_thread:
             self.recording_thread.join()
+
+# if __name__ == '__main__':
+#     # Initialize config
+#     config = ConfigManager('config.yaml')
+#     app_config = config.get_app_config()
+
+#     # Create and start data processor thread
+#     data_processor = DataProcessor(config)
+#     data_processor.start()
