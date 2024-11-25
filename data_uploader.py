@@ -53,7 +53,7 @@ class SFTPUploader(threading.Thread):
                     host=self.host, 
                     username=self.username,
                     password=self.password,
-                    default_path="/",
+                    default_path=f"{self.remote_path}",
                     cnopts=self.cnopts
                 )
                 return sftp
@@ -75,18 +75,20 @@ class SFTPUploader(threading.Thread):
             try:
                 # Establish SFTP connection
                 sftp = self.sftp_connect()
+                if sftp is None:
+                    continue
 
                 # Create a directory for uploaded files to SFTP server
-                posix_remote_path = str(self.remote_path)
-                if not sftp.exists(posix_remote_path):
-                    print(f"Remote directory not found: {posix_remote_path}. Creating it...")
-                    sftp.makedirs(posix_remote_path)
-                    sftp.chdir(posix_remote_path)
-                else:
-                    sftp.chdir(posix_remote_path)
+                # posix_remote_path = str(self.remote_path)
+                # if not sftp.exists(posix_remote_path):
+                #     print(f"Remote directory not found: {posix_remote_path}. Creating it...")
+                #     sftp.makedirs(posix_remote_path)
+                #     sftp.chdir(posix_remote_path)
+                # else:
+                #     sftp.chdir(posix_remote_path)
 
                 # Get list of files
-                file_list = sorted(Path(self.segment_path).glob('*.json'))
+                file_list = sorted(Path(self.segment_path).glob('*'))
 
                 # Limit upload to 50 files
                 upload_count = min(len(file_list), 50)
@@ -98,7 +100,7 @@ class SFTPUploader(threading.Thread):
                     
                     # Wait for the last file to stabilize
                     if segment_file == files_to_upload[-1]:
-                        time.sleep(0.5)
+                        time.sleep(5)
 
                     try:
                         print(f"Uploading {segment_filename}")
@@ -121,7 +123,7 @@ class SFTPUploader(threading.Thread):
                         print("SFTP connection closed")
 
                         # Wait before next upload cycle
-                        time.sleep(2)
+                        time.sleep(1)
                     except Exception as e:
                         print(f"Error closing SFTP connection: {e}")
 
