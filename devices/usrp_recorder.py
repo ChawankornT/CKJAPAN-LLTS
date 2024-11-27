@@ -9,7 +9,7 @@ class USRPRecorder:
     def __init__(self):
         # Threading and queue setup
         self.data_queue = queue.Queue(maxsize=100)  # Buffer for 100 recordings
-        self.running = True
+        self.running = threading.Event()  # Use Event instead of boolean for thread synchronization
         self.recording_thread = None
                 
         # Initialize USRP
@@ -23,9 +23,8 @@ class USRPRecorder:
             center_freq: RX frequency (Hz)
             gain: RX gain (dB)
         """
-
         # Configuration parameters
-        self.sample_rate = sample_rate # Default: 4 MHz
+        self.sample_rate = sample_rate # Default: 2 MHz
         self.center_freq = center_freq # Default: 100 MHz
         self.gain = gain  # RF gain
         self.samples_per_buffer = int(sample_rate)  # Number of samples per recording
@@ -64,38 +63,50 @@ class USRPRecorder:
             buffer = np.zeros(self.samples_per_buffer, dtype=np.complex64)
             metadata = uhd.types.RXMetadata()
             
-            samples_received = 0
-            
-            while self.running:
+            while self.running.is_set():
                 try:
                     # Receive samples
                     samples_received = 0
                     timestamp = time.time()
-
-                    while samples_received < self.samples_per_buffer:
+                    
+                    while samples_received < self.samples_per_buffer and self.running.is_set():
                         result = self.rx_streamer.recv(
                             buffer[samples_received:],
                             metadata,
-                            timeout=0.1
+                            timeout=0.1  # Short timeout to check running status more frequently
                         )
                         
                         if metadata.error_code != uhd.types.RXMetadataErrorCode.none:
+                            if metadata.error_code == uhd.types.RXMetadataErrorCode.timeout:
+                                # Handle timeout by checking if we should continue
+                                if not self.running.is_set():
+                                    break
+                                continue
                             print(f"Error receiving samples: {metadata.error_code}")
                             continue
 
                         samples_received += result
                     
-                    # Put samples in queue
-                    # timestamp = datetime.now()
-                    self.data_queue.put((buffer.copy(), timestamp))
+                    # Only put in queue if we got a full buffer and are still running
+                    if samples_received == self.samples_per_buffer and self.running.is_set():
+                        try:
+                            self.data_queue.put((buffer.copy(), timestamp), timeout=0.1)
+                        except queue.Full:
+                            print("Queue full, dropping samples")
                     
-                except queue.Full:
-                    print("Queue full, dropping samples")
-                    continue
+                except Exception as e:
+                    if self.running.is_set():  # Only print error if we're still supposed to be running
+                        print(f"Error in receive_samples loop: {e}")
                     
         except Exception as e:
-            print(f"Error in receive_samples: {e}")
-            self.running = False
+            print(f"Error in receive_samples thread: {e}")
+        finally:
+            # Ensure streaming is stopped even if an exception occurred
+            try:
+                stream_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.stop_cont)
+                self.rx_streamer.issue_stream_cmd(stream_cmd)
+            except Exception as e:
+                print(f"Error stopping stream in cleanup: {e}")
             
     def get_next_samples(self, timeout=1.0):
         """
@@ -125,18 +136,31 @@ class USRPRecorder:
             
     def start(self):
         """Start recording thread"""
+        self.running.set()  # Set the event to True
         self.recording_thread = threading.Thread(target=self.receive_samples)
         self.recording_thread.start()
         
     def stop(self):
         """Stop recording thread"""
-        self.running = False
+        # Clear the running event first
+        self.running.clear()
         
         # Stop streaming
-        stream_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.stop_cont)
-        self.rx_streamer.issue_stream_cmd(stream_cmd)
+        try:
+            stream_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.stop_cont)
+            self.rx_streamer.issue_stream_cmd(stream_cmd)
+        except Exception as e:
+            print(f"Error stopping stream: {e}")
         
-        # Wait for thread to finish
-        if self.recording_thread:
-            self.recording_thread.join()
+        # Wait for thread to finish with timeout
+        if self.recording_thread and self.recording_thread.is_alive():
+            self.recording_thread.join(timeout=2.0)  # Wait up to 2 seconds
+            if self.recording_thread.is_alive():
+                print("Warning: Recording thread did not terminate within timeout")
             
+        # Clear the queue
+        while not self.data_queue.empty():
+            try:
+                self.data_queue.get_nowait()
+            except queue.Empty:
+                break
