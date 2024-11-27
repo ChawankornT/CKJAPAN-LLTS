@@ -28,13 +28,6 @@ class DataProcessor(threading.Thread):
         self.sample_rate = self.usrp_config.sampling_rate
         self.gain = self.usrp_config.gain
 
-        # Create output directory if it doesn't exist
-        Path(self.segment_path).mkdir(exist_ok=True)
-
-        # Create a directory for the processed data.
-        # self.processed_path = Path(self.data_path, "Processed_Data")
-        # Path(self.processed_path).mkdir(exist_ok=True)
-
     def run(self):
         """Main thread execution"""
         self.running = True
@@ -82,7 +75,7 @@ class DataProcessor(threading.Thread):
                     
                     except Exception as e:
                         print(f"Error processing file {file}: {str(e)}")
-                time.sleep(5)
+                time.sleep(1)
             except Exception as e:
                 print(f"Error in data processor thread: {str(e)}")
                 time.sleep(1)  # Wait before retrying

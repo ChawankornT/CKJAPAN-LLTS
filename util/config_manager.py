@@ -1,6 +1,7 @@
 import json
 import yaml
 import os
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 class SFTPConfig:
@@ -37,6 +38,10 @@ class AppConfig:
         self.trigger_level = int(config_dict.get('trigger_level', 100))
         self.sftp = SFTPConfig(config_dict.get('sftp', {}))
         self.usrp = USRPConfig(config_dict.get('usrp', {}))
+
+        # Create output directory if it doesn't exist
+        Path(self.data_path).mkdir(parents=True, exist_ok=True)
+        Path(self.segment_path).mkdir(parents=True, exist_ok=True)
 
     def __str__(self):
         return f"AppConfig(app_name={self.app_name}, site_name={self.site_name})"
