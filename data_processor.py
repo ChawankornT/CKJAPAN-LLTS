@@ -75,7 +75,7 @@ class DataProcessor(threading.Thread):
                     
                     except Exception as e:
                         print(f"Error processing file {file}: {str(e)}")
-                time.sleep(5)
+                time.sleep(1)
             except Exception as e:
                 print(f"Error in data processor thread: {str(e)}")
                 time.sleep(1)  # Wait before retrying

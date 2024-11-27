@@ -26,7 +26,7 @@ chmod +x run_llts.sh
 
 4. Add Script Directory to PATH: Add the directory containing the script to your PATH environment variable:
 ```bash
-echo 'export PATH=$PATH:/<path-to>/CKJAPAN-LLTS' >> ~/.bashrc
+echo 'export PATH=$PATH:/path/to/CKJAPAN-LLTS' >> ~/.bashrc
 source ~/.bashrc
 ```
 
