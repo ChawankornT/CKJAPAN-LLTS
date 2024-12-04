@@ -1,5 +1,6 @@
 import threading
 import os
+import paramiko
 import pysftp
 import socket
 import time
@@ -58,11 +59,19 @@ class SFTPUploader(threading.Thread):
                 )
                 return sftp
                 # return pysftp.Connection(self.host, username=self.username, password=self.password, default_path=str(self.remote_path))
+            except paramiko.ssh_exception.SSHException as e:
+                print(f"SSHException: {e}")
+            except paramiko.AuthenticationException as e:
+                print(f"AuthenticationException: {e}")
+            except paramiko.SSHException as e:
+                print(f"General SSHException: {e}")
+            except (pysftp.CredentialException, pysftp.ConnectionException,pysftp.SSHException) as e:
+                print(f"SFTP Connection Attempt {attempt + 1} Failed due to SFTP-specific error: {e}",flush=True)
             except Exception as e:
-                print(f"SFTP Connection Attempt {attempt + 1} Failed: {e}")
-                time.sleep(retry_delay)
-        
-        print("Failed to establish SFTP connection after multiple attempts")
+                print(f"SFTP Connection Attempt {attempt + 1} Failed: {e}", flush=True)
+            time.sleep(retry_delay) 
+       
+        print("Failed to establish SFTP connection after multiple attempts", flush=True)
         return None
             
     def run(self):
@@ -81,7 +90,7 @@ class SFTPUploader(threading.Thread):
                 # Create a directory for uploaded files to SFTP server
                 # posix_remote_path = str(self.remote_path)
                 # if not sftp.exists(posix_remote_path):
-                #     print(f"Remote directory not found: {posix_remote_path}. Creating it...")
+                #     print(f"Remote directory not found: {posix_remote_path}. Creating it...", flush=True)
                 #     sftp.makedirs(posix_remote_path)
                 #     sftp.chdir(posix_remote_path)
                 # else:
@@ -100,32 +109,33 @@ class SFTPUploader(threading.Thread):
                     
                     # Wait for the last file to stabilize
                     if segment_file == files_to_upload[-1]:
-                        time.sleep(5)
+                        time.sleep(0)
 
                     try:
-                        print(f"Uploading {segment_filename}")
+                        now = time.ctime()
+                        print(f"[{now}]: Uploading {segment_filename}", flush=True)
                         sftp.put(str(segment_file), preserve_mtime=True)
                         # sftp.close()
 
                         # Remove segment file
                         os.remove(str(segment_file))
                     except Exception as e:
-                        print(f"Upload failed for {segment_filename}: {e}")
+                        print(f"Upload failed for {segment_filename}: {e}", flush=True)
                         break
 
             except Exception as e:
-                print(f"Unexpected error in SFTP uploader: {e}")
+                print(f"Unexpected error in SFTP uploader: {e}", flush=True)
                 time.sleep(1)
             finally:
                 if sftp:
                     try:
                         sftp.close()
-                        print("SFTP connection closed")
+                        #print("SFTP connection closed", flush=True)
 
                         # Wait before next upload cycle
-                        time.sleep(1)
+                        #time.sleep(1)
                     except Exception as e:
-                        print(f"Error closing SFTP connection: {e}")
+                        print(f"Error closing SFTP connection: {e}", flush=True)
 
     def stop(self):
         """
