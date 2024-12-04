@@ -32,48 +32,81 @@ class SFTPUploader(threading.Thread):
         self.remote_path = PurePosixPath(self.remote_path, self.site_name)
 
     def sftp_connect(self):
-        """
-        Establish a connection to the SFTP server with retry mechanism
-        
-        :return: SFTP connection object
-        """
-        max_retries = 5
-        retry_delay = 2
-
-        for attempt in range(max_retries):
-            try:
-                # Set socket timeout
-                socket.setdefaulttimeout(5)
-                
-                # Disable host key checking (consider more secure method in production)
-                self.cnopts = pysftp.CnOpts()
-                self.cnopts.hostkeys = None
-
-                # Establish connection
-                sftp = pysftp.Connection(
-                    host=self.host, 
-                    username=self.username,
-                    password=self.password,
-                    default_path=f"{self.remote_path}",
-                    cnopts=self.cnopts
-                )
-                return sftp
-                # return pysftp.Connection(self.host, username=self.username, password=self.password, default_path=str(self.remote_path))
-            except paramiko.ssh_exception.SSHException as e:
-                print(f"SSHException: {e}")
-            except paramiko.AuthenticationException as e:
-                print(f"AuthenticationException: {e}")
-            except paramiko.SSHException as e:
-                print(f"General SSHException: {e}")
-            except (pysftp.CredentialException, pysftp.ConnectionException,pysftp.SSHException) as e:
-                print(f"SFTP Connection Attempt {attempt + 1} Failed due to SFTP-specific error: {e}",flush=True)
-            except Exception as e:
-                print(f"SFTP Connection Attempt {attempt + 1} Failed: {e}", flush=True)
-            time.sleep(retry_delay) 
-       
-        print("Failed to establish SFTP connection after multiple attempts", flush=True)
-        return None
+            """
+            Establish a connection to the SFTP server with comprehensive error handling
             
+            :return: SFTP connection object or None
+            """
+            max_retries = 5
+            retry_delay = 2
+
+            for attempt in range(max_retries):
+                try:
+                    # Set socket timeout
+                    socket.setdefaulttimeout(5)
+                    
+                    # Disable host key checking (consider more secure method in production)
+                    cnopts = pysftp.CnOpts()
+                    cnopts.hostkeys = None
+
+                    # Establish connection with specific exception handling
+                    sftp = pysftp.Connection(
+                        host=self.host, 
+                        username=self.username,
+                        password=self.password,
+                        default_path=f"{self.remote_path}",
+                        cnopts=cnopts,
+                        port=self.port
+                    )
+                    return sftp
+                
+                except paramiko.AuthenticationException:
+                    print(f"Authentication failed for user {self.username}", flush=True)
+                    break  # Stop retrying for authentication failures
+                except paramiko.SSHException as ssh_err:
+                    print(f"SSH connection failed (Attempt {attempt + 1}): {ssh_err}", flush=True)
+                except socket.timeout:
+                    print(f"Socket timeout connecting to {self.host} (Attempt {attempt + 1})", flush=True)
+                except (pysftp.CredentialException, pysftp.ConnectionException) as e:
+                    print(f"SFTP Connection Attempt {attempt + 1} Failed due to SFTP-specific error: {e}", flush=True)
+                except Exception as e:
+                    print(f"SFTP Connection Attempt {attempt + 1} Failed: {e}", flush=True)
+                    
+                # Wait before next retry
+                time.sleep(retry_delay)
+            
+            print("Failed to establish SFTP connection after multiple attempts", flush=True)
+            return None
+    
+    def upload_file(self, sftp: pysftp.Connection, segment_file: Path):
+            """
+            Upload a single file with detailed error handling
+            
+            :return: Boolean indicating upload success
+            """
+            segment_filename = segment_file.name
+            
+            try:
+                now = time.ctime()
+                print(f"[{now}]: Uploading {segment_filename}", flush=True)
+                sftp.put(str(segment_file), preserve_mtime=True)
+                
+                # Remove segment file after successful upload
+                os.remove(str(segment_file))
+                return True
+            except PermissionError:
+                print(f"Permission denied when uploading {segment_filename}", flush=True)
+            except FileNotFoundError:
+                print(f"File not found: {segment_filename}")
+            except paramiko.SFTPError as sftp_err:
+                print(f"SFTP error during upload of {segment_filename}: {sftp_err}", flush=True)
+            except IOError as io_err:
+                print(f"IO error during upload of {segment_filename}: {io_err}", flush=True)
+            except Exception as e:
+                print(f"Unexpected error uploading {segment_filename}: {e}", flush=True)
+            
+            return False
+    
     def run(self):
         """
         Main thread execution for uploading segment files
@@ -104,23 +137,14 @@ class SFTPUploader(threading.Thread):
                 files_to_upload = file_list[:upload_count]
 
                 # Attempt to upload files
-                for segment_file in files_to_upload:
-                    segment_filename = segment_file.name
-                    
+                for segment_file in files_to_upload:                 
                     # Wait for the last file to stabilize
                     if segment_file == files_to_upload[-1]:
                         time.sleep(0)
 
-                    try:
-                        now = time.ctime()
-                        print(f"[{now}]: Uploading {segment_filename}", flush=True)
-                        sftp.put(str(segment_file), preserve_mtime=True)
-                        # sftp.close()
-
-                        # Remove segment file
-                        os.remove(str(segment_file))
-                    except Exception as e:
-                        print(f"Upload failed for {segment_filename}: {e}", flush=True)
+                    # Upload individual file
+                    if not self.upload_file(sftp, segment_file):
+                        # If upload fails, break the upload loop
                         break
 
             except Exception as e:
